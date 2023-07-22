@@ -14,11 +14,11 @@ class Creature:
     def _generate_itself(self, points):
         self.is_valid = True
         if not points:
-            self.points = [shapely.Point((random.uniform(0, 10), random.uniform(0, 10))) for _ in range(7)]
-            self.points = sorted(self.points, key=lambda k: k.x)
+            generated_points = [shapely.Point((random.uniform(0, 10), random.uniform(0, 10))) for _ in range(8)]
+            generated_points = sorted(generated_points, key=lambda k: k.x)
         else:
-            self.points = points
-        self.polygon = shapely.Polygon(self.points)
+            generated_points = points
+        self.polygon = shapely.Polygon(generated_points)
         if not self.polygon.is_valid:
             # If child, stop generation
             if points:
@@ -27,28 +27,36 @@ class Creature:
             # If first generation, keep trying
             self._generate_itself(None)
 
+    def get_points(self):
+        return [shapely.Point(coordinates) for coordinates in self.polygon.exterior.coords[:-1]]
+
     def is_creature_in_me(self, creature):
-        for creature_point in creature.points:
+        for creature_point in creature.get_points():
             if self.polygon.contains(creature_point):
                 return True
         return False
 
     def translate(self, x_translation=0, y_translation=0):
-        self.points = [ shapely.affinity.translate(point, xoff=x_translation, yoff=y_translation) for point in self.points ]
         self.polygon = shapely.affinity.translate(self.polygon, xoff=x_translation, yoff=y_translation)
+
+    def rotate(self, rotation):
+        self.polygon = shapely.affinity.rotate(self.polygon, rotation)
 
     def ages(self):
         self.age += 1
 
     def plot(self):
         x,y = self.polygon.exterior.xy
+        plt.xlim((0, 10))
         plt.ylim((0, 10))
         plt.plot(x,y)
 
     def recenter(self):
         center = self.polygon.centroid
-        dist_to_5 = 5 - center.y
-        self.translate(y_translation=dist_to_5)
+        x_dist_to_5 = 5 - center.x
+        y_dist_to_5 = 5 - center.y
+        self.translate(x_translation=x_dist_to_5)
+        self.translate(y_translation=y_dist_to_5)
 
 def set_pairs(creatures):
     creature_pairs = []
@@ -61,7 +69,7 @@ def set_pairs(creatures):
     return creature_pairs
 
 def is_outside_arena(creature):
-    for creature_point in creature.points:
+    for creature_point in creature.get_points():
         if creature_point.x < 0:
             return True
     return False
@@ -74,9 +82,11 @@ def plot_arena(creature_pair):
 def fight(creature_pair, winners):
     no_looser = True
     # Place creatures in arena
-    creature_pair[1].translate(10)
     creature_pair[0].recenter()
     creature_pair[1].recenter()
+    creature_pair[1].translate(10)
+    creature_pair[0].rotate(random.choice([0, 90, 180, 270]))
+    creature_pair[1].rotate(random.choice([0, 90, 180, 270]))
     step = 0.5
     nb_steps = 0
     cpt = 0
@@ -108,7 +118,7 @@ def fights(creature_pairs):
 
 def set_child(father, mother):
     child_points = []
-    for father_point, mother_point in zip(father.points, mother.points):
+    for father_point, mother_point in zip(father.get_points(), mother.get_points()):
         x = np.mean((father_point.x, mother_point.x)) + random.uniform(-1, 1)
         if x < 0: x = 0
         if x > 10: x = 10
@@ -132,7 +142,7 @@ def set_children(creatures, nb_creatures):
 
 def game():
     tour_plot = 10
-    nb_tours = 30
+    nb_tours = 100
     nb_creatures = 50
     # Generate creatures
     creatures = [Creature() for _ in range(nb_creatures)]
