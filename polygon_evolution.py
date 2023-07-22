@@ -9,7 +9,7 @@ import time
 class Creature:
     def __init__(self, points=None):
         self._generate_itself(points)
-        self.age = 0
+        self.nb_win = 0
 
     def _generate_itself(self, points):
         self.is_valid = True
@@ -19,7 +19,7 @@ class Creature:
         else:
             generated_points = points
         self.polygon = shapely.Polygon(generated_points)
-        if not self.polygon.is_valid:
+        if not self.polygon.is_valid or not self.is_valid_points():
             # If child, stop generation
             if points:
                 self.is_valid = False
@@ -42,8 +42,8 @@ class Creature:
     def rotate(self, rotation):
         self.polygon = shapely.affinity.rotate(self.polygon, rotation)
 
-    def ages(self):
-        self.age += 1
+    def win(self):
+        self.nb_win += 1
 
     def plot(self):
         x,y = self.polygon.exterior.xy
@@ -57,6 +57,13 @@ class Creature:
         y_dist_to_5 = 5 - center.y
         self.translate(x_translation=x_dist_to_5)
         self.translate(y_translation=y_dist_to_5)
+
+    def is_valid_points(self):
+        self.recenter()
+        for point in self.polygon.exterior.coords[:-1]:
+            if point[0] > 10 or point[0] < 0: return False
+            if point[1] > 10 or point[1] < 0: return False
+        return True
 
 def set_pairs(creatures):
     creature_pairs = []
@@ -79,7 +86,7 @@ def plot_arena(creature_pair):
     creature_pair[1].plot()
     plt.show()
 
-def fight(creature_pair, winners):
+def fight(creature_pair):
     no_looser = True
     # Place creatures in arena
     creature_pair[0].recenter()
@@ -95,50 +102,66 @@ def fight(creature_pair, winners):
         creature_pair[1].translate(-step)
         nb_steps+=1
         # plot_arena(creature_pair)
-        # Check if there is a looser 
+        # Check if there is a looser
         creature_pair_0_lose = creature_pair[0].is_creature_in_me(creature_pair[1])
         creature_pair_1_lose = creature_pair[1].is_creature_in_me(creature_pair[0])
         if creature_pair_0_lose or creature_pair_1_lose:
             no_looser = False
             creature_pair[1].translate(-10+nb_steps*step)
             if not creature_pair_0_lose:
-                winners.append(creature_pair[0])
+                creature_pair[0].win()
             if not creature_pair_1_lose:
-                winners.append(creature_pair[1])
+                creature_pair[1].win()
         # Check if the fighter is outside the arena (normaly cannot happen)
         if is_outside_arena(creature_pair[1]):
             no_looser = False
-    return winners
+    creature_pair[0].recenter()
+    creature_pair[1].recenter()
+    return creature_pair
 
 def fights(creature_pairs):
-    winners = []
+    creatures = []
     for creature_pair in creature_pairs:
-        winners = fight(creature_pair, winners)
+        creature_pair[0].nb_win = 0
+        creature_pair[1].nb_win = 0
+        # Fight n times
+        for _ in range(3):
+            creature_pair = fight(creature_pair)
+        creatures.append(creature_pair[0])
+        creatures.append(creature_pair[1])
+    # Select best winners
+    creatures = sorted(creatures, key=lambda x: x.nb_win, reverse=True)
+    winners = creatures[:10]
     return winners
 
 def set_child(father, mother):
     child_points = []
     for father_point, mother_point in zip(father.get_points(), mother.get_points()):
-        x = np.mean((father_point.x, mother_point.x)) + random.uniform(-1, 1)
-        if x < 0: x = 0
-        if x > 10: x = 10
-        y = np.mean((father_point.y, mother_point.y)) + random.uniform(-1, 1)
-        if y < 0: y = 0
-        if y > 10: y = 10
-        child_points.append(shapely.Point((x, y)))
+        # Merge father and mother
+        child_point = random.choice([father_point, mother_point])
+        # Mutate
+        if random.uniform(0, 1) < 0.2:
+            xoff = random.uniform(-1, 1)
+            yoff = random.uniform(-1, 1)
+            if child_point.x + xoff > 10 or child_point.x + xoff < 0: xoff = 0
+            if child_point.y + yoff > 10 or child_point.y + yoff < 0: yoff = 0
+            child_point = shapely.affinity.translate(child_point, xoff=xoff, yoff=yoff)
+        child_points.append(child_point)
+    # Try to create child
     child = Creature(child_points)
     if not child.is_valid:
         return None
     return child
 
 def set_children(creatures, nb_creatures):
-    while len(creatures) < nb_creatures:
+    new_creatures = []
+    while len(new_creatures) < nb_creatures:
         father = random.choice(creatures)
         mother = random.choice(creatures)
         child = set_child(father, mother)
         if child:
-            creatures.append(child)
-    return creatures
+            new_creatures.append(child)
+    return new_creatures
 
 def game():
     tour_plot = 10
@@ -149,30 +172,24 @@ def game():
     for i in tqdm.tqdm(range(nb_tours)):
         # Fight creatures
         creature_pairs = set_pairs(creatures)
-        creature_winners = fights(creature_pairs)
-
-        # Create n children
-        creatures = set_children(creature_winners, nb_creatures)
-        
-        # Age
-        [ creature.ages() for creature in creatures ]
+        creatures = fights(creature_pairs)
 
         # Plot best creatures
         if i%tour_plot == 0:
-            ages = [creature.age for creature in creatures]
-            plt.hist(ages)
-            plt.show()
-            best_creatures = [ creature for creature in creatures if creature.age > 5 ]
+            nb_wins = [creature.nb_win for creature in creatures]
+            best_creatures = [ creature for creature in creatures if creature.nb_win == 3 ]
             for best_creature in best_creatures[:5]:
                 best_creature.plot()
                 plt.show()
 
+        # Create n children
+        if i < nb_tours-1:
+            creatures = set_children(creatures, nb_creatures)
+
     # Plot each creature with ages
-    ages = [creature.age for creature in creatures]
-    plt.hist(ages)
-    plt.show()
+    nb_wins = [creature.nb_win for creature in creatures]
     for i in range(nb_creatures):
-        print(creatures[i].age)
+        print(creatures[i].nb_win)
         creatures[i].plot()
         plt.show()
 
