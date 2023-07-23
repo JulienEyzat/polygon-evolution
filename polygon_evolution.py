@@ -94,7 +94,7 @@ def fight(creature_pair):
     creature_pair[1].translate(10)
     creature_pair[0].rotate(random.choice([0, 90, 180, 270]))
     creature_pair[1].rotate(random.choice([0, 90, 180, 270]))
-    step = 0.5
+    step = 1
     nb_steps = 0
     cpt = 0
     while no_looser:
@@ -119,13 +119,13 @@ def fight(creature_pair):
     creature_pair[1].recenter()
     return creature_pair
 
-def fights(creature_pairs):
+def fights(creature_pairs, nb_fights):
     creatures = []
     for creature_pair in creature_pairs:
         creature_pair[0].nb_win = 0
         creature_pair[1].nb_win = 0
         # Fight n times
-        for _ in range(3):
+        for _ in range(nb_fights):
             creature_pair = fight(creature_pair)
         creatures.append(creature_pair[0])
         creatures.append(creature_pair[1])
@@ -143,8 +143,6 @@ def set_child(father, mother):
         if random.uniform(0, 1) < 0.2:
             xoff = random.uniform(-1, 1)
             yoff = random.uniform(-1, 1)
-            if child_point.x + xoff > 10 or child_point.x + xoff < 0: xoff = 0
-            if child_point.y + yoff > 10 or child_point.y + yoff < 0: yoff = 0
             child_point = shapely.affinity.translate(child_point, xoff=xoff, yoff=yoff)
         child_points.append(child_point)
     # Try to create child
@@ -167,17 +165,18 @@ def game():
     tour_plot = 10
     nb_tours = 100
     nb_creatures = 50
+    nb_fights = 5
     # Generate creatures
     creatures = [Creature() for _ in range(nb_creatures)]
     for i in tqdm.tqdm(range(nb_tours)):
         # Fight creatures
         creature_pairs = set_pairs(creatures)
-        creatures = fights(creature_pairs)
+        creatures = fights(creature_pairs, nb_fights)
 
         # Plot best creatures
         if i%tour_plot == 0:
             nb_wins = [creature.nb_win for creature in creatures]
-            best_creatures = [ creature for creature in creatures if creature.nb_win == 3 ]
+            best_creatures = [ creature for creature in creatures if creature.nb_win == nb_fights ]
             for best_creature in best_creatures[:5]:
                 best_creature.plot()
                 plt.show()
